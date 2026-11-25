@@ -1,0 +1,49 @@
+# Build verificavel do exe publico (sem o TSS da Microsoft): testes + build.ps1 -SemTss.
+# Em tag v* o exe vira artefato da execucao; a assinatura (SignPath) entra aqui quando o projeto for aprovado.
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pester 5
+        shell: powershell
+        run: Install-Module Pester -MinimumVersion 5.0 -Force -SkipPublisherCheck -Scope CurrentUser
+
+      - name: Testes
+        shell: powershell
+        run: |
+          Import-Module Pester -MinimumVersion 5.0
+          $r = Invoke-Pester tests -PassThru -Output Detailed
+          if ($r.FailedCount -gt 0) { throw "$($r.FailedCount) teste(s) falharam" }
+
+      - name: Versao
+        id: versao
+        shell: powershell
+        run: |
+          $v = if ($env:GITHUB_REF -like 'refs/tags/v*') { $env:GITHUB_REF_NAME.TrimStart('v') } else { '0.0.0' }
+          "versao=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Build do exe publico (sem TSS)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File build\build.ps1 -SemTss -Version ${{ steps.versao.outputs.versao }}
+
+      - name: Artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: OTSS-${{ steps.versao.outputs.versao }}
+          path: |
+            dist/OTSS.exe
+            dist/OTSS.exe.sha256

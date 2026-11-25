@@ -236,6 +236,29 @@ Invoke-Pester tests
 
 ---
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+> **Status:** pedido ao SignPath Foundation em análise; as Releases atuais ainda não são assinadas. /
+> application to SignPath Foundation under review; current Releases are not signed yet.
+
+- O exe publicado em Releases é montado pelo GitHub Actions ([`.github/workflows/build.yml`](.github/workflows/build.yml))
+  a partir deste repositório, com `build\build.ps1 -SemTss`. / The exe published in Releases is built by GitHub Actions
+  from this repository with `build\build.ps1 -SemTss`.
+- Committers and reviewers: [@rvneves](https://github.com/rvneves)
+- Approvers: [@rvneves](https://github.com/rvneves)
+
+### Privacidade / Privacy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user
+or the person installing or operating it.
+
+O OTSS só acessa a rede para baixar o TSS de `https://aka.ms/getTSS`, e apenas quando o usuário aceita (ou usa
+`/silencioso`). A coleta fica na máquina, em `C:\temp\OTSS`; enviá-la a alguém é decisão de quem opera. /
+OTSS only uses the network to download TSS from `https://aka.ms/getTSS`, and only when the user accepts it (or uses
+`/silencioso`). The collection stays on the machine; sending it to anyone is the operator's decision.
+
 ## Créditos / Credits
 
 - Ideia original da coleta simplificada / original idea of the simplified collection:
