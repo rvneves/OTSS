@@ -464,3 +464,33 @@ Describe 'Get-OTSSTssVersionFromScript' {
         Get-OTSSTssVersionFromScript -Path "$TestDrive\nao.ps1" | Should -Be '?'
     }
 }
+
+Describe 'Resolve-OTSSOutputRoot' {
+    BeforeEach {
+        Mock Get-OTSSFixedDrives { @('C', 'D', 'F') } -ModuleName OTSS.Core
+        Mock Get-OTSSFreeBytes { param($Drive) switch ($Drive.TrimEnd(':')) { 'C' { 2.5GB } 'D' { 6GB } 'F' { 120GB } } } -ModuleName OTSS.Core
+        Mock Read-OTSSConfirm { $true } -ModuleName OTSS.Core
+    }
+    It 'espaco suficiente na unidade padrao: mantem e nao pergunta' {
+        Mock Get-OTSSFreeBytes { 50GB } -ModuleName OTSS.Core
+        Resolve-OTSSOutputRoot -OutputRoot 'C:\temp\OTSS' -MinGB 5 | Should -Be 'C:\temp\OTSS'
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 0
+    }
+    It 'pouco espaco em C: propoe a unidade com mais espaco livre' {
+        Resolve-OTSSOutputRoot -OutputRoot 'C:\temp\OTSS' -MinGB 5 | Should -Be 'F:\temp\OTSS'
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 1 -ParameterFilter { $Pergunta -match [regex]::Escape('F:\temp\OTSS') -and $Pergunta -match '120' }
+    }
+    It 'SemPergunta: usa a unidade com mais espaco sem perguntar' {
+        Resolve-OTSSOutputRoot -OutputRoot 'C:\temp\OTSS' -MinGB 5 -SemPergunta | Should -Be 'F:\temp\OTSS'
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 0
+    }
+    It 'usuario recusa: erro com o espaco de C: e as unidades possiveis' {
+        Mock Read-OTSSConfirm { $false } -ModuleName OTSS.Core
+        { Resolve-OTSSOutputRoot -OutputRoot 'C:\temp\OTSS' -MinGB 5 } | Should -Throw -ExpectedMessage '*C:*2?5 GB*F:*D:*'
+    }
+    It 'nenhuma unidade com espaco: erro explicando' {
+        Mock Get-OTSSFreeBytes { 1GB } -ModuleName OTSS.Core
+        { Resolve-OTSSOutputRoot -OutputRoot 'C:\temp\OTSS' -MinGB 5 } | Should -Throw -ExpectedMessage '*nenhuma unidade*5 GB*'
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 0
+    }
+}

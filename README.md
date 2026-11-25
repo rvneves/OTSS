@@ -29,7 +29,7 @@ sobre essa ideia e a leva adiante:
 | Logs de instalação | — | CBS, DISM, logs de atualização do SCCM e evento Setup, com resumo automático de corrupção do repositório de componentes (0x800f0831) e instalação interrompida |
 | Telas azuis | — | Copia minidumps dos últimos 30 dias e informa o `MEMORY.DMP` |
 | Análise | O técnico procura nos arquivos | Gera o `LEIA-PRIMEIRO_IA.md`, um roteiro para a IA (ver abaixo) |
-| Qualidade | — | 93 testes automatizados (Pester) |
+| Qualidade | — | 99 testes automatizados (Pester) |
 
 ### Pronto para conversar com a IA
 
@@ -57,11 +57,14 @@ memória registrado pelo iLO.
    - **Servidor sem internet:** em outra máquina, baixe **https://aka.ms/getTSS**, salve com o nome **`TSS.zip`**
      na **mesma pasta do `OTSS.exe`** e leve os dois juntos para o servidor.
 3. Dê dois cliques no `OTSS.exe` e confirme o "Deseja permitir...?" (precisa ser administrador).
+   Se aparecer **"O Windows protegeu o computador"** (SmartScreen), veja [o aviso do Windows](#aviso-do-windows-smartscreen).
 4. Não precisa escolher nada. Aguarde de 20 a 30 minutos sem fechar a janela; o servidor pode ser usado normalmente.
 5. Pegue o zip em `C:\temp\OTSS\<SERVIDOR>_<AAAAMMDD_HHMMSS>_<Cluster|HyperV|Setup>.zip`.
 6. Para analisar com IA: entregue o zip e peça para começar pelo `LEIA-PRIMEIRO_IA.md`.
 
-- Só lê informações: não altera discos, VMs nem o cluster. Precisa de 5 GB livres em C:.
+- Só lê informações: não altera discos, VMs nem o cluster.
+- Precisa de 5 GB livres. Se o C: não tiver, o OTSS propõe salvar na unidade local com mais espaço
+  (ex.: *"Salvar a coleta em F:\temp\OTSS (F: tem 54 GB livres)? [S/n]"*); com `/silencioso`, escolhe sozinho.
 - Coleta só a máquina local; num cluster, rode em cada nó com problema.
 - Sem janela de espera no fim (uso remoto ou agendado): `OTSS.exe /silencioso`. Nesse modo, sem `TSS.zip` ao lado,
   ele baixa o TSS sem perguntar.
@@ -72,6 +75,19 @@ memória registrado pelo iLO.
 | Nó de cluster (com ou sem Hyper-V) | serviço `ClusSvc` rodando e `Get-Cluster` responde | `-SDP Cluster` (SDDC só se S2D estiver habilitado) |
 | Host Hyper-V fora de cluster | serviço `vmms` presente | `-SDP Cluster -SkipSDPList skipBPA,skipSddc` |
 | Outra | — | `-SDP Setup` |
+
+### Aviso do Windows (SmartScreen)
+
+O `OTSS.exe` ainda não tem assinatura digital. Por isso, ao abrir um exe baixado da internet, o Windows pode mostrar
+**"O Windows protegeu o computador"**. Isso é esperado. Para rodar:
+
+1. confira se o arquivo é o publicado: `(Get-FileHash .\OTSS.exe -Algorithm SHA256).Hash` deve ser igual ao
+   conteúdo do `OTSS.exe.sha256` da Release;
+2. clique em **"Mais informações"** e depois em **"Executar assim mesmo"**;
+   ou, antes de abrir, botão direito no exe → **Propriedades** → marque **"Desbloquear"** → OK;
+   ou, no PowerShell: `Unblock-File .\OTSS.exe`.
+
+Copiado por pen drive ou compartilhamento interno, o aviso normalmente não aparece.
 
 ### Montar o executável
 
@@ -132,7 +148,7 @@ top of that idea and takes it further:
 | Servicing logs | — | CBS, DISM, SCCM update logs and the Setup event log, with an automatic summary of component store corruption (0x800f0831) and interrupted installs |
 | Blue screens | — | Copies minidumps from the last 30 days and reports `MEMORY.DMP` |
 | Analysis | The technician digs through the files | Generates `LEIA-PRIMEIRO_IA.md`, a script for the AI (see below) |
-| Quality | — | 93 automated tests (Pester) |
+| Quality | — | 99 automated tests (Pester) |
 
 ### Ready to talk to an AI
 
@@ -162,11 +178,14 @@ The guide and the console messages are in Portuguese.
    - **Server without internet access:** on another machine, download **https://aka.ms/getTSS**, save it as
      **`TSS.zip`** in the **same folder as `OTSS.exe`** and take both files to the server.
 3. Double-click `OTSS.exe` and accept the UAC prompt (administrator required).
+   If **"Windows protected your PC"** (SmartScreen) shows up, see [the Windows warning](#windows-warning-smartscreen).
 4. Nothing to choose. Wait 20 to 30 minutes without closing the window; the server stays usable.
 5. Pick up the zip at `C:\temp\OTSS\<SERVER>_<YYYYMMDD_HHMMSS>_<Cluster|HyperV|Setup>.zip`.
 6. To analyze with an AI: hand over the zip and ask it to start with `LEIA-PRIMEIRO_IA.md`.
 
-- Read-only: it does not change disks, VMs or the cluster. Needs 5 GB free on C:.
+- Read-only: it does not change disks, VMs or the cluster.
+- Needs 5 GB free. If C: does not have it, OTSS offers to save on the local drive with the most free space
+  (e.g. *"Salvar a coleta em F:\temp\OTSS (F: tem 54 GB livres)? [S/n]"*); with `/silencioso` it picks one itself.
 - Collects the local machine only; on a cluster, run it on each affected node.
 - No pause at the end (remote or scheduled use): `OTSS.exe /silencioso`. In this mode, with no `TSS.zip` next to
   it, it downloads TSS without asking.
@@ -177,6 +196,19 @@ The guide and the console messages are in Portuguese.
 | Cluster node (with or without Hyper-V) | `ClusSvc` running and `Get-Cluster` answers | `-SDP Cluster` (SDDC only when S2D is enabled) |
 | Standalone Hyper-V host | `vmms` service present | `-SDP Cluster -SkipSDPList skipBPA,skipSddc` |
 | Other | — | `-SDP Setup` |
+
+### Windows warning (SmartScreen)
+
+`OTSS.exe` is not digitally signed yet, so when you open an exe downloaded from the internet Windows may show
+**"Windows protected your PC"**. This is expected. To run it:
+
+1. check the file is the published one: `(Get-FileHash .\OTSS.exe -Algorithm SHA256).Hash` must match the content
+   of `OTSS.exe.sha256` in the Release;
+2. click **"More info"** and then **"Run anyway"**;
+   or, before opening it, right-click the exe → **Properties** → tick **"Unblock"** → OK;
+   or, in PowerShell: `Unblock-File .\OTSS.exe`.
+
+When copied by USB drive or internal file share, the warning usually does not appear.
 
 ### Building the executable
 

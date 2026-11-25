@@ -338,6 +338,39 @@ function Test-OTSSFreeSpace {
     return ((Get-OTSSFreeBytes -Drive $Drive) -ge ([long]$MinGB * 1GB))
 }
 
+function Get-OTSSFixedDrives {
+    # Letras dos discos locais (sem rede, CD ou removivel)
+    return @(Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.DeviceID.TrimEnd(':') })
+}
+
+function Resolve-OTSSOutputRoot {
+    # Mantem a pasta de saida se a unidade dela tiver MinGB livres; senao propoe a unidade local com mais espaco
+    # (mesmo caminho, outra letra). -SemPergunta escolhe sozinho. Sem alternativa ou recusado: erro explicativo.
+    param([Parameter(Mandatory)][string]$OutputRoot, [int]$MinGB = 5, [switch]$SemPergunta)
+    $letra = [IO.Path]::GetPathRoot($OutputRoot).Substring(0, 1).ToUpper()
+    if (Test-OTSSFreeSpace -Drive $letra -MinGB $MinGB) { return $OutputRoot }
+    $livre = (Get-OTSSFreeBytes -Drive $letra) / 1GB
+    $opcoes = @(foreach ($d in Get-OTSSFixedDrives) {
+        if ($d.ToUpper() -eq $letra) { continue }
+        $b = Get-OTSSFreeBytes -Drive $d
+        if ($b -ge ([long]$MinGB * 1GB)) { [pscustomobject]@{ Letra = $d.ToUpper(); GB = $b / 1GB } }
+    }) | Sort-Object GB -Descending
+    $situacao = "Espaco livre insuficiente em ${letra}: ({0:N1} GB); sao necessarios pelo menos $MinGB GB." -f $livre
+    if (-not $opcoes) { throw "$situacao E nenhuma unidade local tem $MinGB GB livres. Libere espaco e rode de novo." }
+    $melhor = $opcoes[0]
+    $novo = $melhor.Letra + $OutputRoot.Substring(1)
+    if (-not $SemPergunta) {
+        Write-Host $situacao -ForegroundColor Yellow
+        $pergunta = "Salvar a coleta em $novo ($($melhor.Letra): tem {0:N0} GB livres)? [S/n]" -f $melhor.GB
+        if (-not (Read-OTSSConfirm -Pergunta $pergunta)) {
+            $lista = ($opcoes | ForEach-Object { "$($_.Letra): ({0:N0} GB)" -f $_.GB }) -join ', '
+            throw "$situacao Unidades com espaco: $lista. Libere espaco em ${letra}: ou aceite outra unidade."
+        }
+    }
+    return $novo
+}
+
 function Copy-OTSSMinidumps {
     param(
         [Parameter(Mandatory)][string]$Source,

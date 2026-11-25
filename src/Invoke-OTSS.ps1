@@ -40,12 +40,13 @@ if (-not (Test-OTSSAdmin)) {
 }
 
 # 2. Pasta de saida e espaco livre
-New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
-if (-not (Test-OTSSFreeSpace -Drive 'C' -MinGB 5)) {
-    $livre = [math]::Round((Get-OTSSFreeBytes -Drive 'C') / 1GB, 1)
-    Write-Host "ERRO: espaco livre insuficiente em C: ($livre GB). Sao necessarios pelo menos 5 GB." -ForegroundColor Red
+$rootPadrao = $OutputRoot
+try { $OutputRoot = Resolve-OTSSOutputRoot -OutputRoot $OutputRoot -MinGB 5 -SemPergunta:$SemPergunta }
+catch {
+    Write-Host "ERRO: $($_.Exception.Message)" -ForegroundColor Red
     Finalizar 2
 }
+New-Item -ItemType Directory -Path $OutputRoot -Force | Out-Null
 
 # 3. Deteccao
 $role = Get-OTSSRole
@@ -67,6 +68,7 @@ New-Item -ItemType Directory -Path $pasta -Force | Out-Null
 $log = Join-Path $pasta 'OTSS.log'
 Write-OTSSLog $log "OTSS v$OtssVersion | TSS $TssVersion | maquina $env:COMPUTERNAME | usuario $env:USERDOMAIN\$env:USERNAME"
 Write-OTSSLog $log "Detectado: $desc"
+if ($OutputRoot -ne $rootPadrao) { Write-OTSSLog $log "  AVISO: pouco espaco na unidade de $rootPadrao; coleta salva em $OutputRoot" }
 foreach ($m in $role.Motivo) { Write-OTSSLog $log "  motivo: $m" }
 $regLog = Get-OTSSTssRegLogFolder
 if ($regLog) {

@@ -136,6 +136,15 @@ Describe 'Invoke-OTSS.ps1' {
         (Get-Content "$($pasta.FullName)\OTSS.log" -Encoding UTF8) -join "`n" | Should -Match 'aka\.ms/getTSS'
         Get-ChildItem $out -Directory -Filter '_tss_*' | Should -BeNullOrEmpty
     }
+    It 'pouco espaco e troca de unidade recusada: codigo 2 e mensagem com a alternativa' {
+        Mock Get-OTSSFixedDrives { @('Q', 'R') } -ModuleName OTSS.Core
+        Mock Get-OTSSFreeBytes { param($Drive) if ($Drive.TrimEnd(':') -eq 'R') { 80GB } else { 1GB } } -ModuleName OTSS.Core
+        Mock Get-OTSSFreeBytes { param($Drive) if ($Drive.TrimEnd(':') -eq 'R') { 80GB } else { 1GB } }
+        Mock Read-OTSSConfirm { $false } -ModuleName OTSS.Core
+        $saida = & $script @args0 6>&1 | Out-String
+        $LASTEXITCODE | Should -Be 2
+        $saida | Should -Match 'R:'
+    }
     It 'coleta anterior preservada' {
         New-Item -ItemType Directory "$out\ANTIGA" -Force | Out-Null
         & $script @args0
