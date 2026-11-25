@@ -1,7 +1,8 @@
-// OTSS.exe - Over Troubleshooting Script: iniciador da coleta offline do TSS.
-// Extrai os recursos embutidos (TSS.zip, Invoke-OTSS.ps1, OTSS.Core.psm1, TSSVersion.txt) para
-// C:\temp\OTSS\_tss_<guid>, executa o Invoke-OTSS.ps1 no mesmo console e apaga a pasta no fim.
-// Uso: OTSS.exe [/silencioso]
+// OTSS.exe - Over Troubleshooting Script: iniciador da coleta com o TSS da Microsoft.
+// Extrai os recursos embutidos para C:\temp\OTSS\_tss_<guid>, executa o Invoke-OTSS.ps1 no mesmo console
+// e apaga a pasta no fim. TSS.zip e TSSVersion.txt so existem na montagem interna; o exe publico vem sem
+// o TSS da Microsoft, e o script usa o TSS.zip da pasta do exe ou propoe o download de aka.ms/getTSS.
+// Uso: OTSS.exe [/silencioso]   (/silencioso: sem pausa no fim e, sem TSS, baixa sem perguntar)
 using System;
 using System.Diagnostics;
 using System.IO;
@@ -12,7 +13,8 @@ namespace OTSS
     internal static class Program
     {
         private const string OutputRoot = @"C:\temp\OTSS";
-        private static readonly string[] Recursos = { "TSS.zip", "Invoke-OTSS.ps1", "OTSS.Core.psm1", "TSSVersion.txt" };
+        private static readonly string[] Obrigatorios = { "Invoke-OTSS.ps1", "OTSS.Core.psm1" };
+        private static readonly string[] Opcionais = { "TSS.zip", "TSSVersion.txt" };
 
         private static int Main(string[] args)
         {
@@ -28,14 +30,9 @@ namespace OTSS
             {
                 Directory.CreateDirectory(workDir);
                 Assembly asm = Assembly.GetExecutingAssembly();
-                foreach (string nome in Recursos)
-                {
-                    using (Stream s = asm.GetManifestResourceStream(nome))
-                    {
-                        if (s == null) throw new InvalidOperationException("Recurso ausente no executavel: " + nome);
-                        using (FileStream f = File.Create(Path.Combine(workDir, nome))) { s.CopyTo(f); }
-                    }
-                }
+                foreach (string nome in Obrigatorios)
+                    if (!Extrair(asm, nome, workDir)) throw new InvalidOperationException("Recurso ausente no executavel: " + nome);
+                foreach (string nome in Opcionais) Extrair(asm, nome, workDir);
             }
             catch (Exception ex)
             {
@@ -47,16 +44,23 @@ namespace OTSS
 
             try
             {
-                string tssVersion = File.ReadAllText(Path.Combine(workDir, "TSSVersion.txt")).Trim();
-                string otssVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+                Assembly asm = Assembly.GetExecutingAssembly();
+                string otssVersion = asm.GetName().Version.ToString(3);
+                // Sem barra no fim (ela escaparia a aspa do argumento); na raiz de um drive (E:\) vira E:\.
+                string exeDir = Path.GetDirectoryName(asm.Location).TrimEnd('\\');
+                if (exeDir.EndsWith(":")) exeDir += @"\.";
+                string tssZip = Path.Combine(workDir, "TSS.zip");
+                string verFile = Path.Combine(workDir, "TSSVersion.txt");
                 string ps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
                                          @"WindowsPowerShell\v1.0\powershell.exe");
                 // O script sempre roda com -Silencioso; quem pausa no fim e o iniciador. Assim a janela
                 // nao fecha sem aviso se o PowerShell falhar antes do script (GPO AllSigned, erro de carga).
                 string argumentos = string.Format(
-                    "-NoProfile -ExecutionPolicy Bypass -File \"{0}\" -TssZip \"{1}\" -WorkDir \"{2}\" -OtssVersion \"{3}\" -TssVersion \"{4}\" -Silencioso",
-                    Path.Combine(workDir, "Invoke-OTSS.ps1"), Path.Combine(workDir, "TSS.zip"), workDir,
-                    otssVersion, tssVersion);
+                    "-NoProfile -ExecutionPolicy Bypass -File \"{0}\" -WorkDir \"{1}\" -ExeDir \"{2}\" -OtssVersion \"{3}\" -Silencioso",
+                    Path.Combine(workDir, "Invoke-OTSS.ps1"), workDir, exeDir, otssVersion);
+                if (File.Exists(tssZip)) argumentos += " -TssZip \"" + tssZip + "\"";
+                if (File.Exists(verFile)) argumentos += " -TssVersion \"" + File.ReadAllText(verFile).Trim() + "\"";
+                if (silencioso) argumentos += " -SemPergunta";
 
                 ProcessStartInfo psi = new ProcessStartInfo(ps, argumentos);
                 psi.UseShellExecute = false;
@@ -80,6 +84,16 @@ namespace OTSS
             finally
             {
                 TentarApagar(workDir);
+            }
+        }
+
+        private static bool Extrair(Assembly asm, string nome, string destino)
+        {
+            using (Stream s = asm.GetManifestResourceStream(nome))
+            {
+                if (s == null) return false;
+                using (FileStream f = File.Create(Path.Combine(destino, nome))) { s.CopyTo(f); }
+                return true;
             }
         }
 

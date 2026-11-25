@@ -261,6 +261,69 @@ function Get-OTSSTssErrorCount {
     return $n
 }
 
+#region Obter o TSS (exe publico vem sem o TSS da Microsoft)
+$script:OTSSTssUrl = 'https://aka.ms/getTSS'
+
+function Invoke-OTSSDownload {
+    param([Parameter(Mandatory)][string]$Url, [Parameter(Mandatory)][string]$Destination)
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    (New-Object Net.WebClient).DownloadFile($Url, $Destination)
+}
+
+function Read-OTSSConfirm {
+    # S/N no console; Enter = sim
+    param([Parameter(Mandatory)][string]$Pergunta)
+    $r = Read-Host $Pergunta
+    return (-not $r -or $r.Trim() -match '^(s|sim|y|yes)$')
+}
+
+function Test-OTSSWritableDir {
+    param([string]$Path)
+    if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Container)) { return $false }
+    $t = Join-Path $Path ('.otss_' + [guid]::NewGuid().ToString('N'))
+    try { [IO.File]::WriteAllText($t, 'x'); Remove-Item -LiteralPath $t -Force; return $true } catch { return $false }
+}
+
+function Resolve-OTSSTssZip {
+    # Ordem: TSS embutido no exe -> TSS.zip na pasta do exe -> propor download de aka.ms/getTSS
+    # (salvo na pasta do exe, para as proximas execucoes rodarem sem internet).
+    param([string]$TssZip, [string]$ExeDir, [Parameter(Mandatory)][string]$WorkDir, [switch]$SemPergunta)
+    if ($TssZip) {
+        if (Test-Path -LiteralPath $TssZip) { return [pscustomobject]@{ Path = $TssZip; Origem = 'embutido' } }
+        throw "TSS embutido nao encontrado em $TssZip."
+    }
+    if ($ExeDir) {
+        $lado = Join-Path $ExeDir 'TSS.zip'
+        if (Test-Path -LiteralPath $lado) { return [pscustomobject]@{ Path = $lado; Origem = 'ao lado do exe' } }
+    }
+    $pastaExe = if ($ExeDir) { $ExeDir } else { 'pasta do OTSS.exe' }
+    $instrucao = "Baixe o TSS da Microsoft em $script:OTSSTssUrl (de outra maquina, se preciso), salve o arquivo com o nome TSS.zip na pasta $pastaExe e rode o OTSS.exe de novo."
+    if (-not $SemPergunta) {
+        Write-Host ''
+        Write-Host 'O TSS da Microsoft nao esta junto do OTSS.exe.' -ForegroundColor Yellow
+        if (-not (Read-OTSSConfirm -Pergunta "Baixar agora de $script:OTSSTssUrl (cerca de 25 MB)? [S/n]")) {
+            throw "TSS nao encontrado e download recusado. $instrucao"
+        }
+    }
+    $destino = if (Test-OTSSWritableDir $ExeDir) { Join-Path $ExeDir 'TSS.zip' } else { Join-Path $WorkDir 'TSS.zip' }
+    Write-Host "Baixando o TSS de $script:OTSSTssUrl ..."
+    try { Invoke-OTSSDownload -Url $script:OTSSTssUrl -Destination $destino }
+    catch {
+        Remove-Item -LiteralPath $destino -Force -ErrorAction SilentlyContinue
+        throw "Nao foi possivel baixar o TSS (sem acesso a internet?): $($_.Exception.Message). $instrucao"
+    }
+    return [pscustomobject]@{ Path = $destino; Origem = 'download' }
+}
+
+function Get-OTSSTssVersionFromScript {
+    # Linha $global:TssVerDate = "2026.11.11.0" do TSS.ps1; '?' se nao achar
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return '?' }
+    $m = Select-String -LiteralPath $Path -Pattern '\$global:TssVerDate\s*=\s*"([^"]+)"' | Select-Object -First 1
+    if ($m) { return $m.Matches[0].Groups[1].Value } else { return '?' }
+}
+#endregion
+
 function Get-OTSSTssAge {
     # Dias desde a versao do TSS (ex.: '2026.11.11.0'); -1 se ilegivel
     param([Parameter(Mandatory)][string]$TssVersion, [Parameter(Mandatory)][datetime]$Now)

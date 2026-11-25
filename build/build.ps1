@@ -11,7 +11,10 @@ param(
     [string]$Version = '1.0.0',
     [string]$OutDir,
     [string]$CertThumbprint,
-    [string]$IconPath
+    [string]$IconPath,
+    # Exe publico, SEM o TSS da Microsoft (a licenca do TSS so permite uso interno, sem redistribuicao).
+    # Esse exe usa o TSS.zip da pasta dele ou propoe o download de aka.ms/getTSS.
+    [switch]$SemTss
 )
 $ErrorActionPreference = 'Stop'
 $raiz = Split-Path $PSScriptRoot -Parent
@@ -21,6 +24,10 @@ $cache = Join-Path $PSScriptRoot 'cache'
 New-Item -ItemType Directory -Path $cache, $OutDir -Force | Out-Null
 
 # 1. TSS
+if ($SemTss) {
+    $tssVersion = 'baixado na execucao'
+    Write-Host 'Montagem publica: sem o TSS embutido'
+} else {
 if (-not $TssZipPath) {
     $TssZipPath = Join-Path $cache 'TSS.zip'
     Write-Host 'Baixando o TSS de https://aka.ms/getTSS ...'
@@ -43,6 +50,7 @@ $tssVersion = if ($m.Success) { $m.Groups[1].Value } else { 'desconhecida' }
 $verFile = Join-Path $cache 'TSSVersion.txt'
 [IO.File]::WriteAllText($verFile, $tssVersion)
 Write-Host "TSS versao $tssVersion"
+}
 
 # 3. AssemblyInfo com a versao do OTSS
 $info = Join-Path $cache 'AssemblyInfo.cs'
@@ -64,12 +72,11 @@ $cscArgs = @(
     "/out:$exe",
     "/win32manifest:$(Join-Path $raiz 'launcher\app.manifest')",
     "/win32icon:$IconPath",
-    "/resource:$TssZipPath,TSS.zip",
     "/resource:$(Join-Path $raiz 'src\Invoke-OTSS.ps1'),Invoke-OTSS.ps1",
     "/resource:$(Join-Path $raiz 'src\OTSS.Core.psm1'),OTSS.Core.psm1",
-    "/resource:$verFile,TSSVersion.txt",
     (Join-Path $raiz 'launcher\OTSS.cs'), $info
 )
+if (-not $SemTss) { $cscArgs += "/resource:$TssZipPath,TSS.zip", "/resource:$verFile,TSSVersion.txt" }
 & $csc @cscArgs
 if ($LASTEXITCODE -ne 0) { throw "csc.exe falhou com codigo $LASTEXITCODE" }
 

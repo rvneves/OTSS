@@ -7,7 +7,8 @@
 #>
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)][string]$TssZip,
+    [string]$TssZip,
+    [string]$ExeDir,
     [string]$OutputRoot = 'C:\temp\OTSS',
     [string]$WorkDir,
     [string]$OtssVersion = 'dev',
@@ -15,7 +16,8 @@ param(
     [string]$MinidumpPath = 'C:\Windows\Minidump',
     [string]$MemoryDumpPath = 'C:\Windows\MEMORY.DMP',
     [string]$WindowsDir = $env:SystemRoot,
-    [switch]$Silencioso
+    [switch]$Silencioso,
+    [switch]$SemPergunta
 )
 
 if (-not (Get-Module OTSS.Core)) { Import-Module (Join-Path $PSScriptRoot 'OTSS.Core.psm1') }
@@ -27,7 +29,8 @@ function Finalizar([int]$Codigo) {
 }
 
 Write-Host ''
-Write-Host "OTSS v$OtssVersion  -  coleta offline de diagnostico (TSS $TssVersion)" -ForegroundColor Cyan
+$tssTxt = if ($TssVersion -ne '?') { "TSS $TssVersion" } else { 'TSS da Microsoft obtido na execucao' }
+Write-Host "OTSS v$OtssVersion  -  coleta de diagnostico ($tssTxt)" -ForegroundColor Cyan
 Write-Host "Maquina: $env:COMPUTERNAME"
 
 # 1. Administrador
@@ -65,11 +68,6 @@ $log = Join-Path $pasta 'OTSS.log'
 Write-OTSSLog $log "OTSS v$OtssVersion | TSS $TssVersion | maquina $env:COMPUTERNAME | usuario $env:USERDOMAIN\$env:USERNAME"
 Write-OTSSLog $log "Detectado: $desc"
 foreach ($m in $role.Motivo) { Write-OTSSLog $log "  motivo: $m" }
-$idade = Get-OTSSTssAge -TssVersion $TssVersion -Now (Get-Date)
-if ($idade -ge 0) {
-    Write-OTSSLog $log ("  TSS de {0} ({1} dias)" -f $TssVersion.Substring(0, 10).Replace('.', '-'), $idade)
-    if ($idade -gt 180) { Write-OTSSLog $log '  AVISO: TSS embutido tem mais de 6 meses; considere remontar o OTSS com build\build.ps1.' }
-}
 $regLog = Get-OTSSTssRegLogFolder
 if ($regLog) {
     Write-OTSSLog $log "  AVISO: o registro do TSS aponta LogFolder=$regLog (execucao anterior do TSS interrompida). O TSS pode gravar la em vez desta pasta."
@@ -87,13 +85,21 @@ try {
 
     # 5. Extrair o TSS
     Write-OTSSLog $log '[1/4] Preparando (extraindo o TSS)...'
+    $tss = Resolve-OTSSTssZip -TssZip $TssZip -ExeDir $ExeDir -WorkDir $WorkDir -SemPergunta:$SemPergunta
+    Write-OTSSLog $log "  TSS: $($tss.Origem) ($($tss.Path))"
     $tssDir = Join-Path $WorkDir 'tss'
-    [IO.Compression.ZipFile]::ExtractToDirectory($TssZip, $tssDir)
+    [IO.Compression.ZipFile]::ExtractToDirectory($tss.Path, $tssDir)
     $tssPs1 = Join-Path $tssDir 'TSS.ps1'
     if (-not (Test-Path -LiteralPath $tssPs1)) {
         $achado = Get-ChildItem -LiteralPath $tssDir -Filter 'TSS.ps1' -Recurse -File | Select-Object -First 1
         if (-not $achado) { throw 'TSS.ps1 nao encontrado no pacote do TSS.' }
         $tssPs1 = $achado.FullName
+    }
+    if ($TssVersion -eq '?') { $TssVersion = Get-OTSSTssVersionFromScript -Path $tssPs1 }
+    $idade = Get-OTSSTssAge -TssVersion $TssVersion -Now (Get-Date)
+    if ($idade -ge 0) {
+        Write-OTSSLog $log ("  TSS de {0} ({1} dias)" -f $TssVersion.Substring(0, 10).Replace('.', '-'), $idade)
+        if ($idade -gt 180) { Write-OTSSLog $log '  AVISO: o TSS tem mais de 6 meses; baixe um novo em https://aka.ms/getTSS (ou remonte o OTSS).' }
     }
 
     # 6. Rodar o TSS

@@ -405,3 +405,62 @@ Describe 'Get-OTSSTssAge' {
     It 'versao ilegivel: -1'         { Get-OTSSTssAge -TssVersion '?' -Now (Get-Date) | Should -Be -1 }
 }
 
+
+Describe 'Resolve-OTSSTssZip' {
+    BeforeEach {
+        $wd = New-Item -ItemType Directory (Join-Path $TestDrive ('wd' + [guid]::NewGuid().ToString('N'))) -Force
+        $exeDir = New-Item -ItemType Directory (Join-Path $TestDrive ('exe' + [guid]::NewGuid().ToString('N'))) -Force
+        Mock Invoke-OTSSDownload { param($Url, $Destination) 'z' | Set-Content $Destination } -ModuleName OTSS.Core
+        Mock Read-OTSSConfirm { $true } -ModuleName OTSS.Core
+    }
+    It 'usa o TSS embutido quando existe' {
+        'z' | Set-Content "$wd\TSS.zip"
+        $r = Resolve-OTSSTssZip -TssZip "$wd\TSS.zip" -ExeDir $exeDir -WorkDir $wd
+        $r.Origem | Should -Be 'embutido'
+        $r.Path | Should -Be "$wd\TSS.zip"
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 0
+    }
+    It 'sem TSS embutido usa o TSS.zip ao lado do exe, sem perguntar' {
+        'z' | Set-Content "$exeDir\TSS.zip"
+        $r = Resolve-OTSSTssZip -TssZip '' -ExeDir $exeDir -WorkDir $wd
+        $r.Origem | Should -Be 'ao lado do exe'
+        $r.Path | Should -Be (Join-Path $exeDir 'TSS.zip')
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 0
+    }
+    It 'sem TSS: propoe o download e salva o TSS.zip na pasta do exe' {
+        $r = Resolve-OTSSTssZip -TssZip '' -ExeDir $exeDir -WorkDir $wd
+        $r.Origem | Should -Be 'download'
+        $r.Path | Should -Be (Join-Path $exeDir 'TSS.zip')
+        Test-Path $r.Path | Should -BeTrue
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 1
+        Should -Invoke Invoke-OTSSDownload -ModuleName OTSS.Core -ParameterFilter { $Url -eq 'https://aka.ms/getTSS' }
+    }
+    It 'pasta do exe sem permissao de gravacao: baixa para o WorkDir' {
+        $r = Resolve-OTSSTssZip -TssZip '' -ExeDir "$TestDrive\naoexiste\x" -WorkDir $wd
+        $r.Path | Should -Be (Join-Path $wd 'TSS.zip')
+    }
+    It 'SemPergunta: baixa sem perguntar' {
+        $r = Resolve-OTSSTssZip -TssZip '' -ExeDir $exeDir -WorkDir $wd -SemPergunta
+        $r.Origem | Should -Be 'download'
+        Should -Invoke Read-OTSSConfirm -ModuleName OTSS.Core -Times 0
+    }
+    It 'usuario recusa o download: nao baixa e explica com o link e a pasta' {
+        Mock Read-OTSSConfirm { $false } -ModuleName OTSS.Core
+        { Resolve-OTSSTssZip -TssZip '' -ExeDir $exeDir -WorkDir $wd } | Should -Throw -ExpectedMessage "*https://aka.ms/getTSS*TSS.zip*$($exeDir.FullName)*"
+        Should -Invoke Invoke-OTSSDownload -ModuleName OTSS.Core -Times 0
+    }
+    It 'sem internet: explica com o link e a pasta do exe' {
+        Mock Invoke-OTSSDownload { throw 'sem rede' } -ModuleName OTSS.Core
+        { Resolve-OTSSTssZip -TssZip '' -ExeDir $exeDir -WorkDir $wd } | Should -Throw -ExpectedMessage "*https://aka.ms/getTSS*TSS.zip*$($exeDir.FullName)*"
+    }
+}
+
+Describe 'Get-OTSSTssVersionFromScript' {
+    It 'le a versao do TSS.ps1' {
+        '$global:TssVerDate = "2026.11.11.0"	# versao' | Set-Content "$TestDrive\TSS.ps1"
+        Get-OTSSTssVersionFromScript -Path "$TestDrive\TSS.ps1" | Should -Be '2026.11.11.0'
+    }
+    It 'arquivo sem a linha ou inexistente: ?' {
+        Get-OTSSTssVersionFromScript -Path "$TestDrive\nao.ps1" | Should -Be '?'
+    }
+}

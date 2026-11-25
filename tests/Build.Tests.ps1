@@ -41,6 +41,14 @@ Describe 'build.ps1' {
         $px = $bmp.GetPixel([int]($bmp.Width / 2), [int]($bmp.Height / 2))
         ($px.R -gt 200 -and $px.G -gt 110 -and $px.G -lt 210 -and $px.B -gt 120 -and $px.B -lt 220) | Should -BeTrue -Because "pixel central $($px.R),$($px.G),$($px.B) deveria ser rosa"
     }
+    It '-SemTss: exe publico so com os scripts, sem o TSS da Microsoft' {
+        & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "$raiz\build\build.ps1" -SemTss -OutDir "$TestDrive\dist_pub" -Version '1.1.0' | Out-Null
+        $pub = "$TestDrive\dist_pub\OTSS.exe"
+        $asm = [Reflection.Assembly]::Load([IO.File]::ReadAllBytes($pub))
+        $asm.GetManifestResourceNames() | Sort-Object | Should -Be @('Invoke-OTSS.ps1', 'OTSS.Core.psm1')
+        (Get-Item $pub).Length | Should -BeLessThan 1MB
+        Test-Path "$TestDrive\dist_pub\OTSS.exe.sha256" | Should -BeTrue
+    }
     It 'manifesto pede administrador' {
         [Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes($exe)) | Should -Match 'requireAdministrator'
     }

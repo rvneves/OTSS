@@ -29,7 +29,7 @@ sobre essa ideia e a leva adiante:
 | Logs de instalação | — | CBS, DISM, logs de atualização do SCCM e evento Setup, com resumo automático de corrupção do repositório de componentes (0x800f0831) e instalação interrompida |
 | Telas azuis | — | Copia minidumps dos últimos 30 dias e informa o `MEMORY.DMP` |
 | Análise | O técnico procura nos arquivos | Gera o `LEIA-PRIMEIRO_IA.md`, um roteiro para a IA (ver abaixo) |
-| Qualidade | — | 81 testes automatizados (Pester) |
+| Qualidade | — | 93 testes automatizados (Pester) |
 
 ### Pronto para conversar com a IA
 
@@ -49,14 +49,22 @@ memória registrado pelo iLO.
 
 ### Uso
 
-1. Copie o `OTSS.exe` para o servidor (pen drive, compartilhamento ou RDP).
-2. Dê dois cliques e confirme o "Deseja permitir...?" (precisa ser administrador).
-3. Não precisa escolher nada. Aguarde de 20 a 30 minutos sem fechar a janela; o servidor pode ser usado normalmente.
-4. Pegue o zip em `C:\temp\OTSS\<SERVIDOR>_<AAAAMMDD_HHMMSS>_<Cluster|HyperV|Setup>.zip`.
+1. Baixe o `OTSS.exe` em [Releases](https://github.com/rvneves/OTSS/releases/latest) e copie para o servidor
+   (pen drive, compartilhamento ou RDP).
+2. **O TSS da Microsoft:** o exe público não traz o TSS (a licença da Microsoft não permite redistribuí-lo).
+   - **Servidor com internet:** nada a fazer. Na primeira execução o OTSS pergunta
+     *"Baixar agora de https://aka.ms/getTSS?"*; responda `S` e ele salva o `TSS.zip` ao lado do exe.
+   - **Servidor sem internet:** em outra máquina, baixe **https://aka.ms/getTSS**, salve com o nome **`TSS.zip`**
+     na **mesma pasta do `OTSS.exe`** e leve os dois juntos para o servidor.
+3. Dê dois cliques no `OTSS.exe` e confirme o "Deseja permitir...?" (precisa ser administrador).
+4. Não precisa escolher nada. Aguarde de 20 a 30 minutos sem fechar a janela; o servidor pode ser usado normalmente.
+5. Pegue o zip em `C:\temp\OTSS\<SERVIDOR>_<AAAAMMDD_HHMMSS>_<Cluster|HyperV|Setup>.zip`.
+6. Para analisar com IA: entregue o zip e peça para começar pelo `LEIA-PRIMEIRO_IA.md`.
 
 - Só lê informações: não altera discos, VMs nem o cluster. Precisa de 5 GB livres em C:.
 - Coleta só a máquina local; num cluster, rode em cada nó com problema.
-- Sem janela de espera no fim (uso remoto ou agendado): `OTSS.exe /silencioso`.
+- Sem janela de espera no fim (uso remoto ou agendado): `OTSS.exe /silencioso`. Nesse modo, sem `TSS.zip` ao lado,
+  ele baixa o TSS sem perguntar.
 - Códigos de saída: `0` concluído · `1` concluído com avisos (zip gerado) · `2` falha (ver `OTSS.log`).
 
 | Máquina | Detecção | Coleta do TSS |
@@ -67,16 +75,19 @@ memória registrado pelo iLO.
 
 ### Montar o executável
 
-O TSS da Microsoft **não** vem neste repositório. O script de build baixa a versão oficial e a embute no exe.
 Requisitos: Windows com .NET Framework 4 (o `csc.exe` já vem no Windows) e PowerShell 5.1.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.0.6
-# ou com um TSS.zip já baixado (máquina sem internet):
-powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.0.6 -TssZipPath C:\caminho\TSS.zip
+# exe público, sem o TSS (o mesmo publicado em Releases):
+powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.1.0 -SemTss
+# exe para uso interno da sua organização, com o TSS embutido (baixa de aka.ms/getTSS):
+powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.1.0
+# ...ou com um TSS.zip já baixado:
+powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.1.0 -TssZipPath C:\caminho\TSS.zip
 ```
 
 Gera `dist\OTSS.exe` e `dist\OTSS.exe.sha256`. `-CertThumbprint` assina o exe, se houver certificado.
+A licença do TSS permite uso interno: o exe com o TSS embutido não deve ser redistribuído fora da sua organização.
 O TSS recusa rodar 90 dias após a versão dele; o OTSS usa `-noExpire`, mas remonte periodicamente.
 
 ### Testes
@@ -121,7 +132,7 @@ top of that idea and takes it further:
 | Servicing logs | — | CBS, DISM, SCCM update logs and the Setup event log, with an automatic summary of component store corruption (0x800f0831) and interrupted installs |
 | Blue screens | — | Copies minidumps from the last 30 days and reports `MEMORY.DMP` |
 | Analysis | The technician digs through the files | Generates `LEIA-PRIMEIRO_IA.md`, a script for the AI (see below) |
-| Quality | — | 81 automated tests (Pester) |
+| Quality | — | 93 automated tests (Pester) |
 
 ### Ready to talk to an AI
 
@@ -143,14 +154,22 @@ The guide and the console messages are in Portuguese.
 
 ### Usage
 
-1. Copy `OTSS.exe` to the server (USB drive, file share or RDP).
-2. Double-click it and accept the UAC prompt (administrator required).
-3. Nothing to choose. Wait 20 to 30 minutes without closing the window; the server stays usable.
-4. Pick up the zip at `C:\temp\OTSS\<SERVER>_<YYYYMMDD_HHMMSS>_<Cluster|HyperV|Setup>.zip`.
+1. Download `OTSS.exe` from [Releases](https://github.com/rvneves/OTSS/releases/latest) and copy it to the server
+   (USB drive, file share or RDP).
+2. **Microsoft's TSS:** the public exe does not include TSS (Microsoft's license does not allow redistributing it).
+   - **Server with internet access:** nothing to do. On the first run OTSS asks
+     *"Baixar agora de https://aka.ms/getTSS?"* (download now?); answer `S` and it saves `TSS.zip` next to the exe.
+   - **Server without internet access:** on another machine, download **https://aka.ms/getTSS**, save it as
+     **`TSS.zip`** in the **same folder as `OTSS.exe`** and take both files to the server.
+3. Double-click `OTSS.exe` and accept the UAC prompt (administrator required).
+4. Nothing to choose. Wait 20 to 30 minutes without closing the window; the server stays usable.
+5. Pick up the zip at `C:\temp\OTSS\<SERVER>_<YYYYMMDD_HHMMSS>_<Cluster|HyperV|Setup>.zip`.
+6. To analyze with an AI: hand over the zip and ask it to start with `LEIA-PRIMEIRO_IA.md`.
 
 - Read-only: it does not change disks, VMs or the cluster. Needs 5 GB free on C:.
 - Collects the local machine only; on a cluster, run it on each affected node.
-- No pause at the end (remote or scheduled use): `OTSS.exe /silencioso`.
+- No pause at the end (remote or scheduled use): `OTSS.exe /silencioso`. In this mode, with no `TSS.zip` next to
+  it, it downloads TSS without asking.
 - Exit codes: `0` done · `1` done with warnings (zip created) · `2` failed (see `OTSS.log`).
 
 | Machine | Detection | TSS collection |
@@ -161,17 +180,20 @@ The guide and the console messages are in Portuguese.
 
 ### Building the executable
 
-Microsoft's TSS is **not** included in this repository. The build script downloads the official release and embeds
-it in the exe. Requirements: Windows with .NET Framework 4 (`csc.exe` ships with Windows) and PowerShell 5.1.
+Requirements: Windows with .NET Framework 4 (`csc.exe` ships with Windows) and PowerShell 5.1.
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.0.6
-# or with a TSS.zip you already downloaded (offline machine):
-powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.0.6 -TssZipPath C:\path\TSS.zip
+# public exe, without TSS (the one published in Releases):
+powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.1.0 -SemTss
+# exe for your organization's internal use, with TSS embedded (downloads from aka.ms/getTSS):
+powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.1.0
+# ...or with a TSS.zip you already downloaded:
+powershell -ExecutionPolicy Bypass -File build\build.ps1 -Version 1.1.0 -TssZipPath C:\path\TSS.zip
 ```
 
 It produces `dist\OTSS.exe` and `dist\OTSS.exe.sha256`. `-CertThumbprint` signs the exe when a certificate is
-available. TSS refuses to run 90 days after its release date; OTSS passes `-noExpire`, but rebuild it periodically.
+available. TSS's license allows internal use: do not redistribute the exe with TSS embedded outside your
+organization. TSS refuses to run 90 days after its release date; OTSS passes `-noExpire`, but rebuild it periodically.
 
 ### Tests
 

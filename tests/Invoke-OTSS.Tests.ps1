@@ -116,6 +116,26 @@ Describe 'Invoke-OTSS.ps1' {
         $pasta = Get-ChildItem $out -Directory | Where-Object Name -like '*_Cluster'
         (Get-Content "$($pasta.FullName)\OTSS.log" -Encoding UTF8) -join "`n" | Should -Match 'TSS de 2026-11-11 \(\d+ dias\)'
     }
+    It 'exe sem TSS embutido: usa o TSS.zip ao lado do exe e registra a origem' {
+        $exeDir = New-Item -ItemType Directory "$TestDrive\exe_lado" -Force
+        Copy-Item $zip "$exeDir\TSS.zip"
+        $a = $args0.Clone(); $a.Remove('TssZip'); $a.ExeDir = $exeDir.FullName
+        & $script @a
+        $LASTEXITCODE | Should -Be 0
+        $pasta = Get-ChildItem $out -Directory | Where-Object Name -like '*_Cluster'
+        (Get-Content "$($pasta.FullName)\OTSS.log" -Encoding UTF8) -join "`n" | Should -Match 'TSS: ao lado do exe'
+    }
+    It 'exe sem TSS, sem TSS.zip e sem internet: codigo 2 e instrucao no OTSS.log' {
+        Mock Invoke-OTSSDownload { throw 'sem rede' } -ModuleName OTSS.Core
+        Mock Read-OTSSConfirm { $true } -ModuleName OTSS.Core
+        $exeDir = New-Item -ItemType Directory "$TestDrive\exe_vazio" -Force
+        $a = $args0.Clone(); $a.Remove('TssZip'); $a.ExeDir = $exeDir.FullName
+        & $script @a
+        $LASTEXITCODE | Should -Be 2
+        $pasta = Get-ChildItem $out -Directory | Where-Object Name -like '*_Cluster'
+        (Get-Content "$($pasta.FullName)\OTSS.log" -Encoding UTF8) -join "`n" | Should -Match 'aka\.ms/getTSS'
+        Get-ChildItem $out -Directory -Filter '_tss_*' | Should -BeNullOrEmpty
+    }
     It 'coleta anterior preservada' {
         New-Item -ItemType Directory "$out\ANTIGA" -Force | Out-Null
         & $script @args0
